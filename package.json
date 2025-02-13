@@ -1,0 +1,14 @@
+{
+  "name": "my-nodejs-project",
+  "version": "1.0.0",
+  "description": "A simple Node.js project that serves a phonebook XML file.",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js"
+  },
+  "dependencies": {
+    "express": "^4.21.2"
+  },
+  "author": "",
+  "license": "ISC"
+}

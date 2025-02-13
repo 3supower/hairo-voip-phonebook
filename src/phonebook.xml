@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+    <phonebook>
+        <contact>
+            <name>John Doe</name>
+            <phone>123-456-7890</phone>
+            <email>johndoe@example.com</email>
+        </contact>
+        <contact>
+            <name>Jane Smith</name>
+            <phone>987-654-3210</phone>
+            <email>janesmith@example.com</email>
+        </contact>
+    </phonebook>
