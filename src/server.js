@@ -1,11 +1,15 @@
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
+const morgan = require('morgan');
 const { google } = require('googleapis');
 const { OAuth2 } = google.auth;
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+// Use morgan to log requests to the console
+app.use(morgan('dev'));
 
 // Load client secrets from a local file.
 const CREDENTIALS_PATH = path.join(__dirname, 'credentials.json');
@@ -48,13 +52,21 @@ async function getGoogleContacts() {
     }
 
     const service = google.people({ version: 'v1', auth: oAuth2Client });
-    const res = await service.people.connections.list({
-        resourceName: 'people/me',
-        pageSize: 1000,
-        personFields: 'names,phoneNumbers,emailAddresses',
-    });
+    let connections = [];
+    let pageToken = null;
 
-    const connections = res.data.connections || [];
+    do {
+        const res = await service.people.connections.list({
+            resourceName: 'people/me',
+            pageSize: 1000,
+            personFields: 'names,phoneNumbers,emailAddresses',
+            pageToken: pageToken,
+        });
+
+        connections = connections.concat(res.data.connections || []);
+        pageToken = res.data.nextPageToken;
+    } while (pageToken);
+
     const contacts = connections.map((person) => {
         const names = person.names || [];
         const phoneNumbers = person.phoneNumbers || [];
@@ -71,7 +83,10 @@ async function getGoogleContacts() {
 }
 
 app.get('/generate-phonebook/phonebook.xml', async (req, res) => {
+    const now = new Date();
+    console.log(`Generating phonebook at ${now.toLocaleString()}...`);
     const googleContacts = await getGoogleContacts();
+    console.log(`Number of contacts: ${googleContacts.length}`);
 
     let phonebookData = `
     <?xml version="1.0" encoding="UTF-8"?>
@@ -179,6 +194,7 @@ app.get('/generate-phonebook/phonebook.xml', async (req, res) => {
     // Write the XML data to a file
     const filePath = path.join(__dirname, 'phonebook.xml');
     fs.writeFileSync(filePath, phonebookData.trim());
+    console.log('Phonebook generated successfully.');
 
     // res.set('Content-Type', 'application/xml');
     // res.set('Content-Disposition', 'attachment; filename="phonebook.xml"');
