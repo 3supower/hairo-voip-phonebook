@@ -213,21 +213,27 @@ app.get('/generate-phonebook/remote-phonebook.xml', async (req, res) => {
 
     let phonebookData = `
     <?xml version="1.0" encoding="UTF-8"?>
-    <YealinkIPPhoneBook>
-        <Title>Remote Phonebook</Title>
+    <YealinkIPPhoneDirectory>
+        <Title>Company Phonebook</Title>
         <Menu Name="Customers">
-            <Unit Name="Default" default_photo="" Phone3="" Phone2="" Phone1="12345"/>
+            <DirectoryEntry>
+                <Name>Test Test</Name>
+                <Telephone>12345</Telephone>
+            </DirectoryEntry>
     `;
     
     googleContacts.forEach((contact, index) => {
         phonebookData += `
-            <Unit Name="${contact.firstName} ${contact.lastName}" default_photo="" Phone3="" Phone2="" Phone1="${contact.phoneNumber}"/>
+            <DirectoryEntry>
+                <Name>${contact.firstName} ${contact.lastName}</Name>
+                <Telephone>${contact.phoneNumber}</Telephone>
+            </DirectoryEntry>
         `;
     });
 
     phonebookData += `
         </Menu>
-    </YealinkIPPhoneBook>
+    </YealinkIPPhoneDirectory>
     `;
 
     // Write the XML data to a file
