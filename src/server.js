@@ -176,6 +176,7 @@ app.get('/generate-phonebook', async (req, res) => {
     `;
 
     res.set('Content-Type', 'application/xml');
+    res.set('Content-Disposition', 'attachment; filename="phonebook.xml"');
     res.send(phonebookData.trim());
 });
 
