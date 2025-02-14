@@ -205,12 +205,53 @@ app.get('/generate-phonebook/phonebook.xml', async (req, res) => {
 });
 
 // Serve the phonebook.xml file
-/*
-app.get('/generate-phonebook/phonebook.xml', (req, res) => {
-    const filePath = path.join(__dirname, 'phonebook.xml');
+app.get('/generate-phonebook/remote-phonebook.xml', async (req, res) => {
+    const now = new Date();
+    console.log(`Generating Yealink Remote phonebook at ${now.toLocaleString()}...`);
+    const googleContacts = await getGoogleContacts();
+    console.log(`Number of contacts: ${googleContacts.length}`);
+
+    let phonebookData = `
+    <?xml version="1.0" encoding="UTF-8"?>
+    <YealinkIPPhoneDirectory>
+        <DirectoryEntry>
+            <Name>Tom</Name>
+            <Telephone label="Office Number">66000</Telephone>
+        </DirectoryEntry>
+        <DirectoryEntry>
+            <Name>Jensen</Name>
+            <Telephone label="Office Number">29000</Telephone>
+            <Telephone label="Other Number">42</Telephone>
+        </DirectoryEntry>
+        <DirectoryEntry>
+            <Name>Phil</Name>
+            <Telephone label="Mobile Number">49880</Telephone>
+        </DirectoryEntry>
+        <DirectoryEntry>
+            <Name>Boss</Name>
+            <Telephone label="Other Number">10.10.32.147</Telephone>
+        </DirectoryEntry>
+    `;
+    /*
+    googleContacts.forEach((contact, index) => {
+        phonebookData += `
+        <DirectoryEntry>
+            <Name>${contact.firstName} ${contact.lastName}</Name>
+            <Telephone label="Mobile Number">${contact.phoneNumber}</Telephone>
+        </DirectoryEntry>
+        `;
+    });
+    */
+    phonebookData += `
+    </YealinkIPPhoneDirectory>
+    `;
+
+    // Write the XML data to a file
+    const filePath = path.join(__dirname, 'remote-phonebook.xml');
+    fs.writeFileSync(filePath, phonebookData.trim());
+    console.log('Yealink Remote Phonebook generated successfully.');
     res.sendFile(filePath);
 });
-*/
 
 app.listen(PORT, () => {
     console.log(`Server is running on http://localhost:${PORT}`);

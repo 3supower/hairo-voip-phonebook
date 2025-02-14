@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+    <YealinkIPPhoneDirectory>
+        <DirectoryEntry>
+            <Name>Tom</Name>
+            <Telephone label="Office Number">66000</Telephone>
+        </DirectoryEntry>
+        <DirectoryEntry>
+            <Name>Jensen</Name>
+            <Telephone label="Office Number">29000</Telephone>
+            <Telephone label="Other Number">42</Telephone>
+        </DirectoryEntry>
+        <DirectoryEntry>
+            <Name>Phil</Name>
+            <Telephone label="Mobile Number">49880</Telephone>
+        </DirectoryEntry>
+        <DirectoryEntry>
+            <Name>Boss</Name>
+            <Telephone label="Other Number">10.10.32.147</Telephone>
+        </DirectoryEntry>
+    
+    </YealinkIPPhoneDirectory>
