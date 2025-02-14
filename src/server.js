@@ -160,10 +160,11 @@ app.get('/generate-phonebook/phonebook.xml', async (req, res) => {
             <RingtoneIndex>3</RingtoneIndex>
             <RingtoneUrl>ring3.bin</RingtoneUrl>
             <Frequent>0</Frequent>
-            <Phone type="Home">
+            <Phone type="Work">
                 <phonenumber>${contact.phoneNumber}</phonenumber>
                 <accountindex>1</accountindex>
             </Phone>
+            <Group>193</Group>
             <Primary>0</Primary>
             <Mail>${contact.email}</Mail>
             <Department/>
