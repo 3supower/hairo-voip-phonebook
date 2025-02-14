@@ -232,7 +232,7 @@ app.get('/generate-phonebook/remote-phonebook.xml', async (req, res) => {
             <Telephone label="Other Number">10.10.32.147</Telephone>
         </DirectoryEntry>
     `;
-    /*
+    
     googleContacts.forEach((contact, index) => {
         phonebookData += `
         <DirectoryEntry>
@@ -241,7 +241,7 @@ app.get('/generate-phonebook/remote-phonebook.xml', async (req, res) => {
         </DirectoryEntry>
         `;
     });
-    */
+    
     phonebookData += `
     </YealinkIPPhoneDirectory>
     `;
