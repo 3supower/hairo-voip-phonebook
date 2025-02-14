@@ -1,17 +1,84 @@
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
+const { google } = require('googleapis');
+const { OAuth2 } = google.auth;
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-app.get('/generate-phonebook', (req, res) => {
-    const phonebookData = `
+// Load client secrets from a local file.
+const CREDENTIALS_PATH = path.join(__dirname, 'credentials.json');
+const TOKEN_PATH = path.join(__dirname, 'token.json');
+
+// Scopes for Google Contacts API
+const SCOPES = ['https://www.googleapis.com/auth/contacts.readonly'];
+
+async function getGoogleContacts() {
+    const credentials = JSON.parse(fs.readFileSync(CREDENTIALS_PATH));
+    const { client_secret, client_id, redirect_uris } = credentials.installed;
+    const oAuth2Client = new OAuth2(client_id, client_secret, redirect_uris[0]);
+
+    // Check if we have previously stored a token.
+    if (fs.existsSync(TOKEN_PATH)) {
+        const token = fs.readFileSync(TOKEN_PATH);
+        oAuth2Client.setCredentials(JSON.parse(token));
+    } else {
+        // Get new token
+        const authUrl = oAuth2Client.generateAuthUrl({
+            access_type: 'offline',
+            scope: SCOPES,
+        });
+        console.log('Authorize this app by visiting this url:', authUrl);
+        const rl = readline.createInterface({
+            input: process.stdin,
+            output: process.stdout,
+        });
+        const code = await new Promise((resolve) => {
+            rl.question('Enter the code from that page here: ', (code) => {
+                resolve(code);
+            });
+        });
+        rl.close();
+        const { tokens } = await oAuth2Client.getToken(code);
+        oAuth2Client.setCredentials(tokens);
+        // Store the token to disk for later program executions
+        fs.writeFileSync(TOKEN_PATH, JSON.stringify(tokens));
+        console.log('Token stored to', TOKEN_PATH);
+    }
+
+    const service = google.people({ version: 'v1', auth: oAuth2Client });
+    const res = await service.people.connections.list({
+        resourceName: 'people/me',
+        pageSize: 1000,
+        personFields: 'names,phoneNumbers,emailAddresses',
+    });
+
+    const connections = res.data.connections || [];
+    const contacts = connections.map((person) => {
+        const names = person.names || [];
+        const phoneNumbers = person.phoneNumbers || [];
+        const emails = person.emailAddresses || [];
+        return {
+            firstName: names[0] ? names[0].givenName : '',
+            lastName: names[0] ? names[0].familyName : '',
+            phoneNumber: phoneNumbers[0] ? phoneNumbers[0].value : '',
+            email: emails[0] ? emails[0].value : '',
+        };
+    });
+
+    return contacts;
+}
+
+app.get('/generate-phonebook', async (req, res) => {
+    const googleContacts = await getGoogleContacts();
+
+    let phonebookData = `
     <?xml version="1.0" encoding="UTF-8"?>
     <AddressBook>
         <pbgroup>
-		<id>1</id>
-		<name>Blocklist</name>
+            <id>1</id>
+            <name>Blocklist</name>
         </pbgroup>
         <pbgroup>
             <id>2</id>
@@ -82,6 +149,29 @@ app.get('/generate-phonebook', (req, res) => {
             <Primary>0</Primary>
             <Mail>3supower@gmail.com</Mail>
         </Contact>
+    `;
+
+    googleContacts.forEach((contact, index) => {
+        phonebookData += `
+        <Contact>
+            <id>${210000 + index}</id>
+            <FirstName>${contact.firstName}</FirstName>
+            <LastName>${contact.lastName}</LastName>
+            <RingtoneIndex>0</RingtoneIndex>
+            <RingtoneUrl>system</RingtoneUrl>
+            <Frequent>0</Frequent>
+            <Phone type="Home">
+                <phonenumber>${contact.phoneNumber}</phonenumber>
+                <accountindex>2</accountindex>
+            </Phone>
+            <Primary>0</Primary>
+            <Mail>${contact.email}</Mail>
+            <Department/>
+        </Contact>
+        `;
+    });
+
+    phonebookData += `
     </AddressBook>
     `;
 
