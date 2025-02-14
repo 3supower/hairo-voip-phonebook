@@ -70,7 +70,7 @@ async function getGoogleContacts() {
     return contacts;
 }
 
-app.get('/generate-phonebook', async (req, res) => {
+app.get('/generate-phonebook/phonebook.xml', async (req, res) => {
     const googleContacts = await getGoogleContacts();
 
     let phonebookData = `
@@ -175,10 +175,25 @@ app.get('/generate-phonebook', async (req, res) => {
     </AddressBook>
     `;
 
-    res.set('Content-Type', 'application/xml');
-    res.set('Content-Disposition', 'attachment; filename="phonebook.xml"');
-    res.send(phonebookData.trim());
+    // Write the XML data to a file
+    const filePath = path.join(__dirname, 'phonebook.xml');
+    fs.writeFileSync(filePath, phonebookData.trim());
+
+    // res.set('Content-Type', 'application/xml');
+    // res.set('Content-Disposition', 'attachment; filename="phonebook.xml"');
+    // res.sendFile(filePath);
+
+    // res.send('Phonebook generated successfully. You can access it at /generate-phonebook/phonebook.xml');
+    res.sendFile(filePath);
 });
+
+// Serve the phonebook.xml file
+/*
+app.get('/generate-phonebook/phonebook.xml', (req, res) => {
+    const filePath = path.join(__dirname, 'phonebook.xml');
+    res.sendFile(filePath);
+});
+*/
 
 app.listen(PORT, () => {
     console.log(`Server is running on http://localhost:${PORT}`);
