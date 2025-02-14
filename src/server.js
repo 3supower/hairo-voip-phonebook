@@ -157,12 +157,12 @@ app.get('/generate-phonebook', async (req, res) => {
             <id>${210000 + index}</id>
             <FirstName>${contact.firstName}</FirstName>
             <LastName>${contact.lastName}</LastName>
-            <RingtoneIndex>0</RingtoneIndex>
-            <RingtoneUrl>system</RingtoneUrl>
+            <RingtoneIndex>3</RingtoneIndex>
+            <RingtoneUrl>ring3.bin</RingtoneUrl>
             <Frequent>0</Frequent>
             <Phone type="Home">
                 <phonenumber>${contact.phoneNumber}</phonenumber>
-                <accountindex>2</accountindex>
+                <accountindex>1</accountindex>
             </Phone>
             <Primary>0</Primary>
             <Mail>${contact.email}</Mail>
