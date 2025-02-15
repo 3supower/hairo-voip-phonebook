@@ -214,25 +214,22 @@ app.get('/generate-phonebook/remote-phonebook.xml', async (req, res) => {
     let phonebookData = `
     <?xml version="1.0" encoding="UTF-8"?>
     <YealinkIPPhoneDirectory>
-        <Title>Company Phonebook</Title>
-        <Menu Name="Customers">
-            <DirectoryEntry>
-                <Name>Test Test</Name>
-                <Telephone>12345</Telephone>
-            </DirectoryEntry>
+        <DirectoryEntry>
+	    <Name>Test Test</Name>
+            <Telephone>12345</Telephone>
+        </DirectoryEntry>
     `;
     
     googleContacts.forEach((contact, index) => {
         phonebookData += `
-            <DirectoryEntry>
-                <Name>${contact.firstName} ${contact.lastName}</Name>
-                <Telephone>${contact.phoneNumber}</Telephone>
-            </DirectoryEntry>
+        <DirectoryEntry>
+            <Name>${contact.firstName} ${contact.lastName}</Name>
+            <Telephone>${contact.phoneNumber}</Telephone>
+        </DirectoryEntry>
         `;
     });
 
     phonebookData += `
-        </Menu>
     </YealinkIPPhoneDirectory>
     `;
 
