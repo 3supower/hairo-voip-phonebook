@@ -1,0 +1,5 @@
+node_modules
+npm-debug.log
+.env
+src/credentials.json
+src/token.json
