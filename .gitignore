@@ -3,3 +3,7 @@ npm-debug.log
 .env
 src/credentials.json
 src/token.json
+
+# Generated at runtime from live Google Contacts data - contains real PII
+src/phonebook.xml
+src/remote-phonebook.xml
