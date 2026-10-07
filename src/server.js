@@ -157,7 +157,23 @@ setInterval(() => {
     refreshContacts().catch((err) => console.error('[cache] Scheduled refresh failed:', err.message));
 }, CACHE_TTL);
 
-app.get('/generate-phonebook/phonebook.xml', async (req, res) => {
+// Express 4 ignores promises rejected inside async handlers, which leaves the
+// request hanging and (Node 15+) kills the process. Forward them to next().
+const asyncHandler = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
+
+// Contact data goes into XML text nodes: escape the markup characters and drop
+// characters XML 1.0 does not allow at all (control codes, lone surrogates).
+// Quotes are left alone on purpose: they are legal in text nodes, and some
+// phone XML parsers would show a literal "&apos;" for "O'Neil".
+function escapeXml(value) {
+    return String(value == null ? '' : value)
+        .replace(/[^\x09\x0A\x0D\x20-퟿-�\u{10000}-\u{10FFFF}]/gu, '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+}
+
+app.get('/generate-phonebook/phonebook.xml', asyncHandler(async (req, res) => {
     const now = new Date();
     console.log(`Generating phonebook at ${now.toLocaleString()}...`);
     const googleContacts = await getCachedContacts();
@@ -245,18 +261,18 @@ app.get('/generate-phonebook/phonebook.xml', async (req, res) => {
         phonebookData += `
         <Contact>
             <id>${210000 + index}</id>
-            <FirstName>${contact.firstName}</FirstName>
-            <LastName>${contact.lastName}</LastName>
+            <FirstName>${escapeXml(contact.firstName)}</FirstName>
+            <LastName>${escapeXml(contact.lastName)}</LastName>
             <RingtoneIndex>3</RingtoneIndex>
             <RingtoneUrl>ring3.bin</RingtoneUrl>
             <Frequent>0</Frequent>
             <Phone type="Work">
-                <phonenumber>${contact.phoneNumber}</phonenumber>
+                <phonenumber>${escapeXml(contact.phoneNumber)}</phonenumber>
                 <accountindex>1</accountindex>
             </Phone>
             <Group>193</Group>
             <Primary>0</Primary>
-            <Mail>${contact.email}</Mail>
+            <Mail>${escapeXml(contact.email)}</Mail>
             <Department/>
         </Contact>
         `;
@@ -277,10 +293,10 @@ app.get('/generate-phonebook/phonebook.xml', async (req, res) => {
 
     // res.send('Phonebook generated successfully. You can access it at /generate-phonebook/phonebook.xml');
     res.sendFile(filePath);
-});
+}));
 
 // Serve the phonebook.xml file
-app.get('/generate-phonebook/remote-phonebook.xml', async (req, res) => {
+app.get('/generate-phonebook/remote-phonebook.xml', asyncHandler(async (req, res) => {
     const now = new Date();
     console.log(`Generating Yealink Remote phonebook at ${now.toLocaleString()}...`);
     const googleContacts = await getCachedContacts();
@@ -298,8 +314,8 @@ app.get('/generate-phonebook/remote-phonebook.xml', async (req, res) => {
     googleContacts.forEach((contact, index) => {
         phonebookData += `
         <DirectoryEntry>
-            <Name>${contact.firstName} ${contact.lastName}</Name>
-            <Telephone>${contact.phoneNumber}</Telephone>
+            <Name>${escapeXml(`${contact.firstName} ${contact.lastName}`)}</Name>
+            <Telephone>${escapeXml(contact.phoneNumber)}</Telephone>
         </DirectoryEntry>
         `;
     });
@@ -313,6 +329,14 @@ app.get('/generate-phonebook/remote-phonebook.xml', async (req, res) => {
     fs.writeFileSync(filePath, phonebookData.trim());
     console.log('Yealink Remote Phonebook generated successfully.');
     res.sendFile(filePath);
+}));
+
+// A failed route (e.g. Google unreachable while the cache is still empty)
+// answers 503 so the phone keeps its old phonebook, instead of hanging.
+app.use((err, req, res, next) => {
+    console.error(`[http] ${req.method} ${req.originalUrl} failed:`, err.message);
+    if (res.headersSent) return next(err);
+    res.status(503).type('text/plain').send('Phonebook temporarily unavailable. Please try again shortly.');
 });
 
 // ---------------------------------------------------------------------------
