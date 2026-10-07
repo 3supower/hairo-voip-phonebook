@@ -91,6 +91,22 @@
   .row .src { color: var(--muted); font-size: 0.82rem; text-align: right; }
   .empty { color: var(--muted); text-align: center; padding: 28px 0; }
 
+  /* click-to-copy targets */
+  .copy {
+    font: inherit; color: inherit; background: none; border: 0; border-radius: 6px;
+    padding: 0 4px; margin: 0 -4px; cursor: copy; text-align: left; overflow-wrap: anywhere;
+  }
+  .copy:hover, .copy:focus-visible { background: var(--accent-bg); outline: none; }
+  .copy.done { background: var(--ok-bg); color: var(--ok); }
+  .copy.numbtn { color: var(--muted); font-variant-numeric: tabular-nums; }
+  .item { display: inline-flex; gap: 8px; margin-right: 16px; }
+  .toast {
+    position: fixed; left: 50%; bottom: 28px; transform: translate(-50%, 12px); opacity: 0;
+    background: var(--text); color: var(--bg); padding: 8px 16px; border-radius: 999px;
+    font-size: 0.9rem; pointer-events: none; transition: opacity .15s, transform .15s;
+  }
+  .toast.show { opacity: 1; transform: translate(-50%, 0); }
+
   @media (max-width: 640px) {
     .row { grid-template-columns: 64px 1fr; }
     .row .src { grid-column: 2; text-align: left; }
@@ -109,7 +125,7 @@
   </header>
 
   <section id="hero" class="hero" data-match="none" aria-live="polite">
-    <div class="hero-label" id="heroLabel">가장 최근 번호 조회</div>
+    <div class="hero-label" id="heroLabel">가장 최근 번호 조회 · 이름이나 번호를 클릭하면 복사됩니다</div>
     <div class="hero-name" id="heroName">대기 중</div>
     <div class="hero-number" id="heroNumber"></div>
     <div class="hero-meta" id="heroMeta">전화가 오면 여기에 표시됩니다.</div>
@@ -118,6 +134,7 @@
   <ol id="list" class="list"></ol>
   <div id="empty" class="empty" hidden>아직 조회 기록이 없습니다.</div>
 </div>
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
 
 <script>
 (() => {
@@ -148,6 +165,67 @@
     return node;
   }
   const names = (e) => e.results.map((r) => r.name);
+
+  // ---- click to copy ----
+  // Numbers are copied without spaces so they paste straight into a dialer
+  const cleanNumber = (n) => String(n).replace(/[^\d+]/g, '');
+
+  function copyButton(label, value) {
+    const btn = el('button', 'copy', label);
+    btn.type = 'button';
+    btn.dataset.copy = value;
+    btn.title = `클릭하면 복사: ${value}`;
+    return btn;
+  }
+  // Names joined with " / ", each one its own copy target
+  function nameButtons(list) {
+    const nodes = [];
+    list.forEach((name, i) => {
+      if (i > 0) nodes.push(' / ');
+      nodes.push(copyButton(name, name));
+    });
+    return nodes;
+  }
+
+  async function copyText(text) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch { /* clipboard API needs https or localhost; fall back below */ }
+    try {
+      const area = el('textarea');
+      area.value = text;
+      area.style.cssText = 'position:fixed;opacity:0';
+      document.body.append(area);
+      area.select();
+      const ok = document.execCommand('copy');
+      area.remove();
+      return ok;
+    } catch {
+      return false;
+    }
+  }
+
+  let toastTimer;
+  function toast(text) {
+    const node = $('toast');
+    node.textContent = text;
+    node.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => node.classList.remove('show'), 1600);
+  }
+
+  document.addEventListener('click', async (ev) => {
+    const btn = ev.target.closest('[data-copy]');
+    if (!btn) return;
+    const value = btn.dataset.copy;
+    const ok = await copyText(value);
+    toast(ok ? `복사됨: ${value}` : '복사하지 못했습니다');
+    if (ok) {
+      btn.classList.add('done');
+      setTimeout(() => btn.classList.remove('done'), 900);
+    }
+  });
 
   // ---- sound + desktop notification ----
   let audio = null;
@@ -213,8 +291,8 @@
     }
     const found = names(latest);
     hero.dataset.match = found.length ? 'yes' : 'no';
-    $('heroName').textContent = found.length ? found.join(' / ') : '등록되지 않은 번호';
-    $('heroNumber').textContent = latest.display;
+    $('heroName').replaceChildren(...(found.length ? nameButtons(found) : ['등록되지 않은 번호']));
+    $('heroNumber').replaceChildren(copyButton(latest.display, cleanNumber(latest.query)));
     const meta = $('heroMeta');
     meta.textContent = '';
     const when = el('span', '', ago(latest.time));
@@ -235,13 +313,28 @@
     const found = names(e);
     if (e.kind === 'call') {
       li.append(el('span', found.length ? 'badge call' : 'badge call unknown', '번호 조회'));
-      const main = el('span', 'main', found.length ? found.join(' / ') : '등록되지 않은 번호');
-      main.append(el('span', 'num', e.display));
+      const main = el('span', 'main');
+      main.append(...(found.length ? nameButtons(found) : ['등록되지 않은 번호']));
+      const num = el('span', 'num');
+      num.append(copyButton(e.display, cleanNumber(e.query)));
+      main.append(num);
       li.append(main);
     } else {
       li.append(el('span', 'badge find', '이름 검색'));
-      const shown = found.slice(0, 3).join(', ') + (found.length > 3 ? ` 외 ${found.length - 3}명` : '');
-      li.append(el('span', 'main', `“${e.display}” → ${found.length ? shown : '결과 없음'}`));
+      const main = el('span', 'main', `“${e.display}” → `);
+      if (!e.results.length) main.append('결과 없음');
+      e.results.slice(0, 3).forEach((r) => {
+        const item = el('span', 'item');
+        item.append(copyButton(r.name, r.name));
+        if (r.number) {
+          const numBtn = copyButton(r.display || r.number, cleanNumber(r.number));
+          numBtn.classList.add('numbtn');
+          item.append(numBtn);
+        }
+        main.append(item);
+      });
+      if (e.results.length > 3) main.append(`외 ${e.results.length - 3}명`);
+      li.append(main);
     }
     li.append(el('span', 'src', e.sources.join(', ')));
     return li;

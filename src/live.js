@@ -61,6 +61,11 @@ function logLine(event, ms) {
 // results: [{ name, number }]
 function publishSearch({ kind, query, source, results, ms }) {
     const now = Date.now();
+    results = results.map((r) => {
+        const digits = String(r.number || '').replace(/\D/g, '');
+        const pretty = formatNumber(digits);
+        return { ...r, display: pretty !== digits ? pretty : String(r.number || '').trim() };
+    });
     const sourceLabel = labelFor(source);
 
     if (kind === 'call') {
