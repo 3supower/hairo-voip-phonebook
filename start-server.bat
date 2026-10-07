@@ -25,6 +25,9 @@ if not exist node_modules (
     )
 )
 
+if not defined PORT set PORT=3000
+echo [INFO] Live view: http://localhost:%PORT%/live (opens in your browser)
+start "" cmd /c "timeout /t 4 /nobreak >nul & start http://localhost:%PORT%/live"
 echo [INFO] Starting server (HTTP :3000, LDAP :3890)...
 call npm start
 

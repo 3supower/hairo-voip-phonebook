@@ -1,0 +1,289 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>전화 조회 현황</title>
+<style>
+  :root {
+    --bg: #f4f5f8;
+    --surface: #ffffff;
+    --text: #16181d;
+    --muted: #667085;
+    --line: #e2e5ec;
+    --ok: #0f7a4a;
+    --ok-bg: #e2f5eb;
+    --warn: #9a5700;
+    --warn-bg: #fff0d9;
+    --accent: #2a5bd7;
+    --accent-bg: #e8eefc;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0e1014;
+      --surface: #171a20;
+      --text: #eef0f4;
+      --muted: #98a0b0;
+      --line: #292e38;
+      --ok: #4fd39c;
+      --ok-bg: #123124;
+      --warn: #ffb454;
+      --warn-bg: #3a2a10;
+      --accent: #7ba3ff;
+      --accent-bg: #1a2540;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 16px/1.45 "Segoe UI", "Malgun Gothic", system-ui, sans-serif;
+  }
+  .wrap { max-width: 960px; margin: 0 auto; padding: 20px 16px 48px; }
+
+  header { display: flex; flex-wrap: wrap; gap: 12px 20px; align-items: center; justify-content: space-between; margin-bottom: 20px; }
+  h1 { margin: 0; font-size: 1.25rem; font-weight: 650; }
+  .tools { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; color: var(--muted); font-size: 0.9rem; }
+  .tools label { display: inline-flex; gap: 6px; align-items: center; cursor: pointer; }
+  button {
+    font: inherit; font-size: 0.9rem; color: var(--text); background: var(--surface);
+    border: 1px solid var(--line); border-radius: 8px; padding: 6px 12px; cursor: pointer;
+  }
+  button:hover { border-color: var(--accent); }
+  button[aria-pressed="true"] { background: var(--accent-bg); border-color: var(--accent); color: var(--accent); }
+
+  .conn { display: inline-flex; align-items: center; gap: 6px; }
+  .conn::before { content: ""; width: 9px; height: 9px; border-radius: 50%; background: var(--muted); }
+  .conn[data-state="ok"]::before { background: var(--ok); }
+  .conn[data-state="down"]::before { background: var(--warn); }
+
+  .hero {
+    background: var(--surface); border: 1px solid var(--line); border-left-width: 8px;
+    border-radius: 14px; padding: 22px 26px; margin-bottom: 24px;
+  }
+  .hero[data-match="yes"] { border-left-color: var(--ok); }
+  .hero[data-match="no"] { border-left-color: var(--warn); background: var(--warn-bg); }
+  .hero[data-match="none"] { border-left-color: var(--line); }
+  .hero.flash { animation: flash 1.4s ease-out; }
+  @keyframes flash {
+    0% { box-shadow: 0 0 0 0 var(--accent); transform: scale(1.012); }
+    100% { box-shadow: 0 0 0 18px transparent; transform: scale(1); }
+  }
+  .hero-label { font-size: 0.85rem; color: var(--muted); margin-bottom: 6px; }
+  .hero-name { font-size: clamp(2rem, 6vw, 3.6rem); font-weight: 700; line-height: 1.1; overflow-wrap: anywhere; }
+  .hero[data-match="no"] .hero-name { color: var(--warn); }
+  .hero-number { font-size: clamp(1.3rem, 3.4vw, 2rem); font-variant-numeric: tabular-nums; margin-top: 6px; }
+  .hero-meta { margin-top: 12px; color: var(--muted); font-size: 0.9rem; }
+
+  .list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+  .row {
+    display: grid; grid-template-columns: 76px 72px 1fr auto; gap: 12px; align-items: center;
+    background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px;
+  }
+  .row .time { color: var(--muted); font-variant-numeric: tabular-nums; font-size: 0.9rem; }
+  .badge { font-size: 0.78rem; font-weight: 600; text-align: center; border-radius: 999px; padding: 2px 8px; }
+  .badge.call { background: var(--ok-bg); color: var(--ok); }
+  .badge.call.unknown { background: var(--warn-bg); color: var(--warn); }
+  .badge.find { background: var(--accent-bg); color: var(--accent); }
+  .row .main { min-width: 0; overflow-wrap: anywhere; }
+  .row .main .num { color: var(--muted); font-variant-numeric: tabular-nums; margin-left: 8px; font-size: 0.92rem; }
+  .row .src { color: var(--muted); font-size: 0.82rem; text-align: right; }
+  .empty { color: var(--muted); text-align: center; padding: 28px 0; }
+
+  @media (max-width: 640px) {
+    .row { grid-template-columns: 64px 1fr; }
+    .row .src { grid-column: 2; text-align: left; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>전화 조회 현황</h1>
+    <div class="tools">
+      <span id="conn" class="conn" data-state="connecting">연결 중…</span>
+      <label><input type="checkbox" id="onlyCalls"> 번호 조회만 보기</label>
+      <button id="alertBtn" type="button" aria-pressed="false">알림 켜기</button>
+    </div>
+  </header>
+
+  <section id="hero" class="hero" data-match="none" aria-live="polite">
+    <div class="hero-label" id="heroLabel">가장 최근 번호 조회</div>
+    <div class="hero-name" id="heroName">대기 중</div>
+    <div class="hero-number" id="heroNumber"></div>
+    <div class="hero-meta" id="heroMeta">전화가 오면 여기에 표시됩니다.</div>
+  </section>
+
+  <ol id="list" class="list"></ol>
+  <div id="empty" class="empty" hidden>아직 조회 기록이 없습니다.</div>
+</div>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const events = new Map();
+
+  // ---- settings (best effort: storage can be unavailable) ----
+  const store = {
+    get(key) { try { return localStorage.getItem(key); } catch { return null; } },
+    set(key, value) { try { localStorage.setItem(key, value); } catch { /* ignore */ } },
+  };
+  let alertsOn = store.get('alerts') === '1';
+  $('onlyCalls').checked = store.get('onlyCalls') === '1';
+
+  // ---- helpers ----
+  const clock = (ms) => new Date(ms).toTimeString().slice(0, 8);
+  function ago(ms) {
+    const s = Math.max(0, Math.round((Date.now() - ms) / 1000));
+    if (s < 5) return '방금';
+    if (s < 60) return `${s}초 전`;
+    if (s < 3600) return `${Math.floor(s / 60)}분 전`;
+    return `${Math.floor(s / 3600)}시간 전`;
+  }
+  function el(tag, className, text) {
+    const node = document.createElement(tag);
+    if (className) node.className = className;
+    if (text !== undefined) node.textContent = text;
+    return node;
+  }
+  const names = (e) => e.results.map((r) => r.name);
+
+  // ---- sound + desktop notification ----
+  let audio = null;
+  function ensureAudio() {
+    if (!audio) audio = new (window.AudioContext || window.webkitAudioContext)();
+    if (audio.state === 'suspended') audio.resume();
+  }
+  function beep() {
+    if (!audio || audio.state !== 'running') return;
+    [0, 0.18].forEach((delay, i) => {
+      const osc = audio.createOscillator();
+      const gain = audio.createGain();
+      osc.frequency.value = i === 0 ? 660 : 880;
+      gain.gain.setValueAtTime(0.0001, audio.currentTime + delay);
+      gain.gain.exponentialRampToValueAtTime(0.25, audio.currentTime + delay + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, audio.currentTime + delay + 0.16);
+      osc.connect(gain).connect(audio.destination);
+      osc.start(audio.currentTime + delay);
+      osc.stop(audio.currentTime + delay + 0.18);
+    });
+  }
+  function notify(e) {
+    if (!alertsOn) return;
+    beep();
+    if (document.hidden && 'Notification' in window && Notification.permission === 'granted') {
+      const who = names(e).join(', ') || '등록되지 않은 번호';
+      new Notification(`전화 조회: ${who}`, { body: e.display, tag: 'phonebook-call' });
+    }
+  }
+  function syncAlertButton() {
+    const btn = $('alertBtn');
+    btn.setAttribute('aria-pressed', String(alertsOn));
+    btn.textContent = alertsOn ? '알림 켜짐' : '알림 켜기';
+  }
+  $('alertBtn').addEventListener('click', () => {
+    alertsOn = !alertsOn;
+    store.set('alerts', alertsOn ? '1' : '0');
+    if (alertsOn) {
+      ensureAudio();
+      beep();
+      if ('Notification' in window && Notification.permission === 'default') Notification.requestPermission();
+    }
+    syncAlertButton();
+  });
+  // Browsers only allow sound after a click; resume on the first one after a reload
+  document.addEventListener('pointerdown', () => { if (alertsOn) ensureAudio(); }, { once: true });
+  syncAlertButton();
+
+  $('onlyCalls').addEventListener('change', (ev) => {
+    store.set('onlyCalls', ev.target.checked ? '1' : '0');
+    render();
+  });
+
+  // ---- rendering ----
+  function renderHero(latest, flash) {
+    const hero = $('hero');
+    if (!latest) {
+      hero.dataset.match = 'none';
+      $('heroName').textContent = '대기 중';
+      $('heroNumber').textContent = '';
+      $('heroMeta').textContent = '전화가 오면 여기에 표시됩니다.';
+      return;
+    }
+    const found = names(latest);
+    hero.dataset.match = found.length ? 'yes' : 'no';
+    $('heroName').textContent = found.length ? found.join(' / ') : '등록되지 않은 번호';
+    $('heroNumber').textContent = latest.display;
+    const meta = $('heroMeta');
+    meta.textContent = '';
+    const when = el('span', '', ago(latest.time));
+    when.dataset.t = latest.time;
+    meta.append(`${clock(latest.time)} · `, when, ` · ${latest.sources.join(', ')}`);
+
+    if (flash) {
+      hero.classList.remove('flash');
+      void hero.offsetWidth; // restart the animation
+      hero.classList.add('flash');
+    }
+  }
+
+  function renderRow(e) {
+    const li = el('li', 'row');
+    li.append(el('span', 'time', clock(e.time)));
+
+    const found = names(e);
+    if (e.kind === 'call') {
+      li.append(el('span', found.length ? 'badge call' : 'badge call unknown', '번호 조회'));
+      const main = el('span', 'main', found.length ? found.join(' / ') : '등록되지 않은 번호');
+      main.append(el('span', 'num', e.display));
+      li.append(main);
+    } else {
+      li.append(el('span', 'badge find', '이름 검색'));
+      const shown = found.slice(0, 3).join(', ') + (found.length > 3 ? ` 외 ${found.length - 3}명` : '');
+      li.append(el('span', 'main', `“${e.display}” → ${found.length ? shown : '결과 없음'}`));
+    }
+    li.append(el('span', 'src', e.sources.join(', ')));
+    return li;
+  }
+
+  function render(flashHero = false) {
+    const sorted = [...events.values()].sort((a, b) => b.time - a.time);
+    renderHero(sorted.find((e) => e.kind === 'call'), flashHero);
+
+    const onlyCalls = $('onlyCalls').checked;
+    const rows = sorted.filter((e) => !onlyCalls || e.kind === 'call');
+    $('list').replaceChildren(...rows.map(renderRow));
+    $('empty').hidden = rows.length > 0;
+  }
+
+  setInterval(() => {
+    document.querySelectorAll('[data-t]').forEach((node) => { node.textContent = ago(Number(node.dataset.t)); });
+  }, 1000);
+
+  // ---- live connection ----
+  const conn = $('conn');
+  function setConn(state, text) { conn.dataset.state = state; conn.textContent = text; }
+
+  const source = new EventSource('/live/events');
+  source.onopen = () => setConn('ok', '실시간 연결됨');
+  source.onerror = () => setConn('down', '연결 끊김 — 재연결 중…');
+
+  // Full history on (re)connect: shown, but never rings
+  source.addEventListener('init', (msg) => {
+    events.clear();
+    JSON.parse(msg.data).forEach((e) => events.set(e.id, e));
+    render();
+  });
+
+  source.addEventListener('search', (msg) => {
+    const e = JSON.parse(msg.data);
+    const isNew = !events.has(e.id);
+    events.set(e.id, e);
+    render(isNew && e.kind === 'call');
+    if (isNew && e.kind === 'call') notify(e);
+  });
+})();
+</script>
+</body>
+</html>

@@ -5,14 +5,19 @@ const morgan = require('morgan');
 const ldap = require('ldapjs');
 const { google } = require('googleapis');
 const { OAuth2 } = google.auth;
+const { mountLive, publishSearch } = require('./live');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 const LDAP_PORT = process.env.LDAP_PORT || 3890;
 const LDAP_BASE_DN = 'dc=contacts,dc=local';
+const LDAP_DEBUG = process.env.LDAP_DEBUG === '1'; // also print each raw LDAP filter
 
 // Use morgan to log requests to the console
 app.use(morgan('dev'));
+
+// Live view of phone lookups at http://localhost:<PORT>/live
+mountLive(app);
 
 // Load client secrets from a local file.
 const CREDENTIALS_PATH = path.join(__dirname, 'credentials.json');
@@ -316,6 +321,7 @@ app.get('/generate-phonebook/remote-phonebook.xml', async (req, res) => {
 // ---------------------------------------------------------------------------
 const LDAP_MAX_RESULTS = 200;
 const LDAP_MIN_TERM_LENGTH = 2;
+const LIVE_MIN_NUMBER_DIGITS = 6; // shorter digit strings are treated as name searches
 
 // LDAP entries are rebuilt only when the underlying contact cache changes
 const ldapEntryCache = { builtAt: -1, entries: [] };
@@ -406,23 +412,47 @@ function matchesFilter(filter, lowerAttrs) {
 
 // Collect the literal search terms in a filter (ignoring objectclass) so we
 // can reject browse-all queries that would dump all 3,200 contacts on the phone
-function extractSearchTerms(filter, terms = []) {
+function extractAttrTerms(filter, terms = []) {
     const type = String(filter.type || '').toLowerCase();
 
     if (type.startsWith('and') || type.startsWith('or')) {
-        (filter.filters || []).forEach((f) => extractSearchTerms(f, terms));
+        (filter.filters || []).forEach((f) => extractAttrTerms(f, terms));
     } else if (type.startsWith('not')) {
-        if (filter.filter && filter.filter !== filter) extractSearchTerms(filter.filter, terms);
-    } else if (String(filter.attribute || '').toLowerCase() !== 'objectclass') {
+        if (filter.filter && filter.filter !== filter) extractAttrTerms(filter.filter, terms);
+    } else {
+        const attr = String(filter.attribute || '').toLowerCase();
+        if (attr === 'objectclass') return terms;
+
         if (type.includes('substring')) {
             [filter.initial, ...(filter.any || []), filter.final]
                 .filter(Boolean)
-                .forEach((part) => terms.push(String(part)));
+                .forEach((part) => terms.push({ attr, value: String(part) }));
         } else if (filter.value !== undefined && filter.value !== null) {
-            terms.push(String(filter.value));
+            terms.push({ attr, value: String(filter.value) });
         }
     }
     return terms;
+}
+
+function extractSearchTerms(filter) {
+    return extractAttrTerms(filter).map((t) => t.value);
+}
+
+// Phones look up an incoming caller by number (telephoneNumber=*0430139124*);
+// anything else is someone typing a name into the phone's search box.
+function describeSearch(filter) {
+    const terms = extractAttrTerms(filter);
+
+    const numbers = terms
+        .filter((t) => t.attr === 'telephonenumber')
+        .map((t) => t.value.replace(/\D/g, ''))
+        .filter((digits) => digits.length >= LIVE_MIN_NUMBER_DIGITS);
+    if (numbers.length > 0) {
+        return { kind: 'call', query: numbers.reduce((a, b) => (b.length > a.length ? b : a)) };
+    }
+
+    const longest = terms.map((t) => t.value).reduce((a, b) => (b.length > a.length ? b : a), '');
+    return { kind: 'find', query: longest };
 }
 
 const ldapServer = ldap.createServer();
@@ -436,8 +466,10 @@ ldapServer.bind('', (req, res, next) => {
 
 ldapServer.search(LDAP_BASE_DN, async (req, res, next) => {
     const startedAt = Date.now();
-    const filterStr = req.filter.toString();
-    console.log(`[LDAP] Search from ${req.connection.remoteAddress}: base="${req.dn}" scope=${req.scope} filter=${filterStr}`);
+    const source = req.connection.remoteAddress;
+    if (LDAP_DEBUG) {
+        console.log(`[LDAP] Search from ${source}: base="${req.dn}" scope=${req.scope} filter=${req.filter.toString()}`);
+    }
 
     try {
         const contacts = await getCachedContacts();
@@ -451,15 +483,17 @@ ldapServer.search(LDAP_BASE_DN, async (req, res, next) => {
         }
 
         let sent = 0;
+        const matched = [];
         for (const entry of buildLdapEntries(contacts)) {
             if (sent >= LDAP_MAX_RESULTS) break;
             if (matchesFilter(req.filter, entry.lower)) {
                 res.send({ dn: entry.dn, attributes: entry.attributes });
+                matched.push({ name: entry.attributes.cn, number: entry.attributes.telephoneNumber });
                 sent++;
             }
         }
 
-        console.log(`[LDAP] → ${sent} entries in ${Date.now() - startedAt}ms`);
+        publishSearch({ ...describeSearch(req.filter), source, results: matched, ms: Date.now() - startedAt });
         res.end();
         return next();
     } catch (err) {
